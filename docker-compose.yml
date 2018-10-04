@@ -1,0 +1,8 @@
+version: "3"
+services:
+  backend:
+    build: .
+    volumes:
+      - ./:/go/src/github.com/DirectX/hashcloud
+    ports:
+      - 3010:3010
