@@ -9,21 +9,37 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 )
 
 func main() {
+	storagePath := filepath.Join(".", "storage")
+	storageDataPath := filepath.Join(storagePath, "data")
+	storageMetaPath := filepath.Join(storagePath, "meta")
+
+	if _, err := os.Stat(storagePath); os.IsNotExist(err) {
+		os.Mkdir(storagePath, 0755)
+
+		if _, err := os.Stat(storageDataPath); os.IsNotExist(err) {
+			os.Mkdir(storageDataPath, 0755)
+		}
+
+		if _, err := os.Stat(storageMetaPath); os.IsNotExist(err) {
+			os.Mkdir(storageMetaPath, 0755)
+		}
+	}
+
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", MainHandler).Methods("GET")
 	router.HandleFunc("/upload", UploadHandler).Methods("POST")
 	router.HandleFunc("/get/{hash}", GetHandler).Methods("GET")
 
-	log.Println("Listening at port 3001...")
-	log.Fatal(http.ListenAndServe(":3001", router))
+	log.Println("Listening at port 3010...")
+	log.Fatal(http.ListenAndServe(":3010", router))
 }
 
 func MainHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
-	fmt.Fprintf(w, "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>File Upload</title></head><body><form action=\"/upload\" enctype=\"multipart/form-data\" method=\"post\"><p><input type=\"file\" name=\"file\"><input type=\"submit\" value=\"Upload\"></p></form></body></html>");
+	http.ServeFile(w, r, filepath.Join(".", "html", "index.html"))
 }
 
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +61,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	h.Write(data)
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 	
-	dataFileName := fmt.Sprintf("./storage/data/%s", hash)
+	dataFileName := filepath.Join(".", "storage", "data", hash)
 
 	if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 		err = ioutil.WriteFile(dataFileName, data, 0644)
@@ -54,7 +70,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error writing file", 500)
 			return
 		} else {
-			metaFileName := fmt.Sprintf("./storage/meta/%s", hash)
+			metaFileName := filepath.Join(".", "storage", "meta", hash)
 
 			fileMeta := FileMeta{
 				Filename: handler.Filename,
@@ -77,7 +93,7 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	hash := vars["hash"]
 
-	metaFileName := fmt.Sprintf("./storage/meta/%s", hash)
+	metaFileName := filepath.Join(".", "storage", "meta", hash)
 	
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
 		http.NotFound(w, r)
@@ -90,7 +106,7 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 			var fileMeta FileMeta
 			json.Unmarshal(meta, &fileMeta)
 
-			dataFileName := fmt.Sprintf("./storage/data/%s", hash)
+			dataFileName := filepath.Join(".", "storage", "data", hash)
 			
 			if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 				http.NotFound(w, r)

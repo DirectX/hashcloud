@@ -1,2 +1,2 @@
-# hash-cloud
+# HashCloud
 Hash-based cloud storage
