@@ -1,0 +1,19 @@
+body {
+  padding-top: 5rem;
+}
+
+.files-panel {
+	margin-top: 2.5rem;
+}
+
+.file-panel {
+	background-color: #eeeeee;
+	margin-top: 1.5rem;
+	border-radius: 6px;
+}
+
+.table td.fit, 
+.table th.fit {
+    white-space: nowrap;
+    width: 1%;
+}
