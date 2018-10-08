@@ -43,50 +43,65 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
-	file, handler, err := r.FormFile("file")
-	if err != nil {
-		http.Error(w, "Error getting file", 500)
-		return
+	hashes := []string{}
+
+	requestMeta := UploadRequestMeta{}
+	requestMetaString := r.FormValue("meta")
+	if err := json.Unmarshal([]byte(requestMetaString), &requestMeta); err != nil {
+		panic(err)
 	}
-	defer file.Close()
+	fmt.Println(requestMeta)
 
-	data, err := ioutil.ReadAll(file)
+	r.ParseMultipartForm(32 << 20)
+	files := r.MultipartForm.File["files"]
+	for _, handler := range files {
+		file, err := handler.Open()
+		defer file.Close()
 
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	h := sha256.New()
-	h.Write(data)
-	hash := fmt.Sprintf("%x", h.Sum(nil))
-	
-	dataFileName := filepath.Join(".", "storage", "data", hash)
-
-	if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
-		err = ioutil.WriteFile(dataFileName, data, 0644)
-
+		data, err := ioutil.ReadAll(file)
 		if err != nil {
-			http.Error(w, "Error writing file", 500)
+			http.NotFound(w, r)
 			return
-		} else {
-			metaFileName := filepath.Join(".", "storage", "meta", hash)
-
-			fileMeta := FileMeta{
-				Filename: handler.Filename,
-				ContentType: handler.Header.Get("Content-Type"),
-			}
-
-			meta, _ := json.Marshal(fileMeta)
-
-			_ = ioutil.WriteFile(metaFileName, meta, 0644)
 		}
-	} else {
-		log.Println("Data file already exists, skipping...");
+
+		h := sha256.New()
+		h.Write(data)
+		hash := fmt.Sprintf("%x", h.Sum(nil))
+		hashes = append(hashes, hash)
+
+		dataFileName := filepath.Join(".", "storage", "data", hash)
+		if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
+			err = ioutil.WriteFile(dataFileName, data, 0644)
+
+			if err != nil {
+				http.Error(w, "Error writing file", 500)
+				return
+			} else {
+				metaFileName := filepath.Join(".", "storage", "meta", hash)
+
+				fileMeta := FileMeta{
+					ACL:         map[string]int{requestMeta.Owner: RoleOwner},
+					Filename:    handler.Filename,
+					ContentType: handler.Header.Get("Content-Type"),
+				}
+
+				meta, _ := json.Marshal(fileMeta)
+
+				_ = ioutil.WriteFile(metaFileName, meta, 0644)
+			}
+		} else {
+			log.Println("Data file already exists, skipping...")
+		}
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=UTF-8")
-	fmt.Fprintf(w, "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>File Upload</title></head><body><a href=\"/get/%s\">/get/%s</a></body></html>", hash, hash);
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+    w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	if err := json.NewEncoder(w).Encode(hashes); err != nil {
+		panic(err)
+	}
 }
 
 func GetHandler(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +109,7 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 	hash := vars["hash"]
 
 	metaFileName := filepath.Join(".", "storage", "meta", hash)
-	
+
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
 		http.NotFound(w, r)
 	} else {
@@ -107,7 +122,7 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 			json.Unmarshal(meta, &fileMeta)
 
 			dataFileName := filepath.Join(".", "storage", "data", hash)
-			
+
 			if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 				http.NotFound(w, r)
 			} else {

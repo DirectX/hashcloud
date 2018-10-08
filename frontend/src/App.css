@@ -1,5 +1,6 @@
 body {
-  padding-top: 5rem;
+  padding-top: 7rem;
+  padding-bottom: 3rem;
 }
 
 .files-panel {
@@ -12,8 +13,6 @@ body {
 	border-radius: 6px;
 }
 
-.table td.fit, 
-.table th.fit {
-    white-space: nowrap;
-    width: 1%;
+.table th {
+	width: 50%;
 }

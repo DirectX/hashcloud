@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Alert, Button, Container, Form, FormGroup, CustomInput, Nav, NavItem, NavLink, Row, Col } from 'reactstrap';
+import { Alert, Button, Container, Form, FormGroup, CustomInput, Nav, NavItem, NavLink, Row, Col, Table } from 'reactstrap';
 import Web3 from 'web3';
 import { sha256Hash } from './sha256';
 import './App.css';
@@ -41,10 +41,12 @@ class App extends Component {
       metamaskWarningOpen: false,
       web3js: new Web3(window.web3.currentProvider),
       files: [],
+      result: '',
     };
 
     this.onSelectFiles = this.onSelectFiles.bind(this);
     this.onUpload = this.onUpload.bind(this);
+    this.onCancel = this.onCancel.bind(this);
 
     this.state.web3js.eth.net.getNetworkType().then((networkName) => {
       if (networkName !== 'rinkeby') {
@@ -84,52 +86,73 @@ class App extends Component {
   }
 
   async onSelectFiles(event) {
-    var fileList = event.target.files;
-    var promises = [];
-    var totalSize = 0;
+    const fileList = event.target.files;
+    let promises = [];
+    let totalSize = 0;
+    let fileCount = 0;
 
     for (let index = 0; index < fileList.length; index++) {
       const file = fileList[index];
       
       promises.push(new Promise((resolve, reject) => {
-        var reader = new FileReader();
-        
-        reader.onload = function(loadedEvent) {
-          const arrayBuffer = loadedEvent.target.result;
-          const hash = sha256Hash(arrayBuffer);
-          totalSize += file.size;
+        if (file.size > 20 * 1024 * 1024) {
+          resolve({ index: index, hash: '', file: file, oversize: true });
+        } else {
+          let reader = new FileReader();
+          
+          reader.onload = function(loadedEvent) {
+            const arrayBuffer = loadedEvent.target.result;
+            const hash = sha256Hash(arrayBuffer);
+            totalSize += file.size;
+            fileCount++;
 
-          resolve({ index: index, hash: hash, file: file });
-        };
-        reader.readAsArrayBuffer(file);
+            resolve({ hash: hash, file: file });
+          };
+          reader.readAsArrayBuffer(file);
+        }
       }));
     }
 
     let files = await Promise.all(promises);
 
-    this.setState({ files: files, totalSize: totalSize });
+    this.setState({ files: files, totalSize: totalSize, fileCount: fileCount });
   }
 
   async onUpload(event) {
     try {
-      const dataHash = this.state.web3js.utils.sha3("Some text");
+      let hashes = [];
+      for (const file of this.state.files) {
+        hashes.push(file.hash);
+      }
+      const allHashString = hashes.join('+');
+      const dataHash = this.state.web3js.utils.sha3(allHashString);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
       //const recoveredSender = await this.state.web3js.eth.personal.ecRecover(dataHash, signature) === this.state.account.toLowerCase();
       //console.log(signature, recoveredSender);
 
-      var data = new FormData()
+      let metaData = { owner: this.state.account, signature: signature };
+
+      let data = new FormData()
+      data.append('meta', JSON.stringify(metaData));
       for (const file of this.state.files) {
         data.append('files', file.file, file.file.name);
       }
 
-      fetch('/upload', {
+      let result = await fetch('http://localhost:3010/upload', {
         method: 'POST',
         body: data
       });
+
+      let resultJson = await result.json();
     
-      this.setState({ signature: signature });
+      this.setState({ result: resultJson });
     } catch(err) {
+      console.log(err);
     }
+  }
+
+  async onCancel(event) {
+    this.setState({ files: [], result: [] });
   }
 
   render() {
@@ -159,29 +182,62 @@ class App extends Component {
           <Alert color="info" isOpen={this.state.metamaskWarningOpen} toggle={this.onDismissMetamaskInfo}>
             Please unlock MetaMask account and select Rinkeby test network
           </Alert>
-          <h1>Upload Files</h1>
-          <br />
-          <Form>
-            <FormGroup>
-              <CustomInput type="file" id="fileBrowser" name="file" label="Select files..." onChange={this.onSelectFiles} multiple />
-            </FormGroup>
-          </Form>
+          <h1 className="mx-3">Upload to the Cloud</h1>
+          <div hidden={this.state.files.length !== 0} className="files-panel">
+            <Form className="mx-3">
+              <FormGroup>
+                <CustomInput type="file" id="fileBrowser" name="file" label="Select files..." onChange={this.onSelectFiles} multiple />
+              </FormGroup>
+            </Form>
+          </div>
           <div hidden={this.state.files.length === 0} className="files-panel">
-            <h2>Loaded Files</h2>
             {this.state.files.map(function (file) {
               return <Container className="file-panel p-3 shadow">
-                <Row className="align-items-center">
-                  <Col className="lead"><span className="font-weight-bold">{file.file.name}</span></Col>
-                  <Col className="lead">{file.hash}</Col>
-                  <Col className="lead col-1">{humanFileSize(file.file.size, true)}</Col>
+                <Row className="lead align-items-center">
+                  <Col className="col-7 text-truncate" title={file.file.name}><span className="font-weight-bold">{file.file.name}</span></Col>
+                  <Col className="col-3 text-muted">{file.file.type}</Col>
+                  <Col className={"col-2 text-right " + (file.oversize ? "font-weight-bold text-danger" : "")}>{humanFileSize(file.file.size, true)}</Col>
                 </Row>
               </Container>
             }, this)}
           </div>
           <div hidden={this.state.files.length === 0} className="files-panel">
-            <h2>Summary</h2>
+            <h2 className="mx-3">Summary</h2>
+            <div className="container lead">
+              <div className="row justify-content-start">
+                <div className="col-6 text-right">
+                  File owner
+                </div>
+                <div className="col-6">
+                  {this.state.account}
+                </div>
+              </div>
+              <div className="row justify-content-start">
+                <div className="col-6 text-right">
+                  File Count
+                </div>
+                <div className="col-6">
+                  {this.state.fileCount}
+                </div>
+              </div>
+              <div className="row justify-content-start">
+                <div className="col-6 text-right">
+                  Total Size
+                </div>
+                <div className="col-6">
+                  {humanFileSize(this.state.totalSize, true)}
+                </div>
+              </div>
+            </div>
             <br />
-            <div className="text-center" onClick={this.onUpload}><Button color="success" size="lg">Upload</Button></div>
+            <div className="text-center">
+              <Button className="mr-2" color="success" size="lg" onClick={this.onUpload}>Upload</Button>
+              <Button color="secondary" size="lg" onClick={this.onCancel}>Cancel</Button>
+            </div>
+          </div>
+          <div hidden={!this.state.result} className="files-panel">
+            <h2 className="mx-3">Result</h2>
+            <pre><code>{this.state.result}</code></pre>
           </div>
         </Container>
       </div>
