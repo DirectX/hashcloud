@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
-import { Alert, Button, Container, Form, FormGroup, CustomInput, Nav, NavItem, NavLink, Row, Col, Table } from 'reactstrap';
+import { Alert, Button, Container, Form, FormGroup, CustomInput, Nav, NavItem, NavLink, Row, Col } from 'reactstrap';
 import Web3 from 'web3';
+import FileSaver from 'file-saver';
 import { sha256Hash } from './sha256';
 import './App.css';
 
@@ -40,6 +41,7 @@ class App extends Component {
       balance: '0',
       metamaskWarningOpen: false,
       web3js: new Web3(window.web3.currentProvider),
+      files: [],
       newFiles: [],
       result: [],
       uploaded: false,
@@ -48,6 +50,7 @@ class App extends Component {
     this.onSelectFiles = this.onSelectFiles.bind(this);
     this.onUpload = this.onUpload.bind(this);
     this.onCancel = this.onCancel.bind(this);
+    this.onDownload = this.onDownload.bind(this);
 
     this.state.web3js.eth.net.getNetworkType().then((networkName) => {
       if (networkName !== 'rinkeby') {
@@ -94,7 +97,21 @@ class App extends Component {
     if (account && this.state.account !== account) {
       let balance = await this.state.web3js.eth.getBalance(account);
       self.setState({ account: accounts[0], balance: balance.toString() });
+
+      this.loadUserFiles();
     }
+  }
+
+  async loadUserFiles() {
+    const account = this.state.account;
+
+    let result = await fetch(`http://localhost:3010/api/v1/list/${account}`, {
+      method: 'GET'
+    });
+
+    let files = await result.json();
+
+    this.setState({ files: files });
   }
 
   async onSelectFiles(event) {
@@ -144,16 +161,14 @@ class App extends Component {
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
 
       let data = new FormData()
-
       data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
-      
       files.map(file => {
         data.append('files', file.file, file.file.name);
       });
 
-      let result = await fetch('http://localhost:3010/upload', {
+      let result = await fetch('http://localhost:3010/api/v1/upload', {
         method: 'POST',
-        body: data
+        body: data,
       });
 
       let resultJson = await result.json();
@@ -170,7 +185,31 @@ class App extends Component {
   }
 
   async onCancel(event) {
+    if (this.state.result.length > 0)
+      this.loadUserFiles();
+
     this.setState({ newFiles: [], result: [], uploaded: false });
+  }
+
+  async onDownload(hash, filename) {
+    try {
+      const dataHash = this.state.web3js.utils.sha3(hash);
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+
+      let data = new FormData()
+      data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
+
+      let response = await fetch(`http://localhost:3010/api/v1/download/${hash}`, {
+        method: 'POST',
+        body: data,
+      });
+
+      let blob = await response.blob();
+
+      FileSaver.saveAs(blob, filename);
+    } catch (err) {
+      alert('Unathorized');
+    }
   }
 
   render() {
@@ -183,7 +222,7 @@ class App extends Component {
           </button>
           <div className="collapse navbar-collapse" id="navbarsExampleDefault">
             <ul className="navbar-nav mr-auto">
-              <li className="nav-item active">
+              <li className="nav-item active" hidden={true}>
                 <NavLink href="#">Home <span className="sr-only">(current)</span></NavLink>
               </li>
             </ul>
@@ -260,6 +299,16 @@ class App extends Component {
           </div>
           <div className="files-panel">
             <h2 className="mx-3">My Files</h2>
+            {this.state.files.map(file => {
+              return <Container className="file-panel p-3 shadow">
+                <Row className="lead align-items-center">
+                  <Col className="col-5 text-truncate" title={file.filename}><span className="font-weight-bold">{file.filename}</span></Col>
+                  <Col className="col-3 text-muted">{file.contentType}</Col>
+                  <Col className="col-2 text-right">{humanFileSize(file.contentSize, true)}</Col>
+                  <Col className="col-2 text-right"><Button color="primary" outline onClick={() => this.onDownload(file.hash, file.filename)}>Download...</Button></Col>
+                </Row>
+              </Container>
+            }, this)}
           </div>
         </Container>
       </div>

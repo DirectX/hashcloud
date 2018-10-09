@@ -38,10 +38,9 @@ func main() {
 	}
 
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/", MainHandler).Methods("GET")
-	router.HandleFunc("/upload", UploadHandler).Methods("POST")
-	router.HandleFunc("/list/{address}", ListHandler).Methods("GET")
-	router.HandleFunc("/get/{hash}", GetHandler).Methods("GET")
+	router.HandleFunc("/api/v1/upload", UploadHandler).Methods("POST")
+	router.HandleFunc("/api/v1/list/{address}", ListHandler).Methods("GET")
+	router.HandleFunc("/api/v1/download/{hash}", DownloadHandler).Methods("POST")
 
 	log.Println("Listening at port 3010...")
 	log.Fatal(http.ListenAndServe(":3010", router))
@@ -55,7 +54,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	hashes := []string{}         // All file hashes
 	hashesUploaded := []string{} // HAshes of actually uploaded files
 
-	requestMeta := UploadRequestMeta{}
+	requestMeta := RequestMeta{}
 	requestMetaString := r.FormValue("meta")
 	if err := json.Unmarshal([]byte(requestMetaString), &requestMeta); err != nil {
 		panic(err)
@@ -89,11 +88,13 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 				metaFileName := filepath.Join(storagePath, "meta", hash)
 
 				fileMeta := FileMeta{
+					Hash:        hash,
 					IP:          GetIP(r),
 					Timestamp:   time.Now(),
 					ACL:         map[string]int{requestMeta.Owner: RoleOwner},
 					Filename:    handler.Filename,
 					ContentType: handler.Header.Get("Content-Type"),
+					ContentSize: handler.Size,
 				}
 
 				meta, _ := json.Marshal(fileMeta)
@@ -132,11 +133,24 @@ func ListHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	address := vars["address"]
 
-	hashes := []string{}
+	fileMetas := []FileMetaPublic{}
 	files, err := ioutil.ReadDir(filepath.Join(storagePath, "users", address))
     if err == nil {
 	    for _, f := range files {
-    		hashes = append(hashes, f.Name())
+    		hash := f.Name()
+
+			jsonFile, err := os.Open(filepath.Join(storagePath, "meta", hash))
+			if err != nil {
+				continue
+			}
+			defer jsonFile.Close()
+
+			byteValue, _ := ioutil.ReadAll(jsonFile)
+
+			var fileMeta FileMetaPublic
+			json.Unmarshal(byteValue, &fileMeta)
+
+			fileMetas = append(fileMetas, fileMeta)
     	}
     }
 
@@ -145,17 +159,22 @@ func ListHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	if err := json.NewEncoder(w).Encode(hashes); err != nil {
+	if err := json.NewEncoder(w).Encode(fileMetas); err != nil {
 		panic(err)
 	}
 }
 
-func GetHandler(w http.ResponseWriter, r *http.Request) {
+func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	hash := vars["hash"]
 
-	metaFileName := filepath.Join(".", "storage", "meta", hash)
+	requestMeta := RequestMeta{}
+	requestMetaString := r.FormValue("meta")
+	if err := json.Unmarshal([]byte(requestMetaString), &requestMeta); err != nil {
+		panic(err)
+	}
 
+	metaFileName := filepath.Join(".", "storage", "meta", hash)
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
 		http.NotFound(w, r)
 	} else {
@@ -172,7 +191,13 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 			if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 				http.NotFound(w, r)
 			} else {
+				// TODO: check signature and owner
+
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("Access-Control-Allow-Methods", "POST")
+				w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 				w.Header().Set("Content-Type", fileMeta.ContentType)
+
 				http.ServeFile(w, r, dataFileName)
 			}
 		}
