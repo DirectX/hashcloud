@@ -1,5 +1,9 @@
 package main
 
+import (
+	"time"
+)
+
 type UploadRequestMeta struct {
 	Owner     string    `json:"owner"`
 	Signature string    `json:"signature"`
@@ -16,7 +20,9 @@ const (
 )
 
 type FileMeta struct {
-	ACL         ACL    `json:"acl"`
-	Filename    string `json:"filename"`
-	ContentType string `json:"content-type"`
+	IP          string    `json:"ip"`
+	Timestamp   time.Time `json:"timestamp"`
+	ACL         ACL       `json:"acl"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content-type"`
 }

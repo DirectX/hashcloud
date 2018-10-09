@@ -10,28 +10,37 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
+var storagePath string
+
 func main() {
-	storagePath := filepath.Join(".", "storage")
-	storageDataPath := filepath.Join(storagePath, "data")
-	storageMetaPath := filepath.Join(storagePath, "meta")
+	storagePath = filepath.Join(".", "storage")
 
 	if _, err := os.Stat(storagePath); os.IsNotExist(err) {
 		os.Mkdir(storagePath, 0755)
 
+		storageDataPath := filepath.Join(storagePath, "data")
 		if _, err := os.Stat(storageDataPath); os.IsNotExist(err) {
 			os.Mkdir(storageDataPath, 0755)
 		}
 
+		storageMetaPath := filepath.Join(storagePath, "meta")
 		if _, err := os.Stat(storageMetaPath); os.IsNotExist(err) {
 			os.Mkdir(storageMetaPath, 0755)
+		}
+
+		storageUsersPath := filepath.Join(storagePath, "users")
+		if _, err := os.Stat(storageUsersPath); os.IsNotExist(err) {
+			os.Mkdir(storageUsersPath, 0755)
 		}
 	}
 
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", MainHandler).Methods("GET")
 	router.HandleFunc("/upload", UploadHandler).Methods("POST")
+	router.HandleFunc("/list/{address}", ListHandler).Methods("GET")
 	router.HandleFunc("/get/{hash}", GetHandler).Methods("GET")
 
 	log.Println("Listening at port 3010...")
@@ -43,14 +52,14 @@ func MainHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
-	hashes := []string{}
+	hashes := []string{}         // All file hashes
+	hashesUploaded := []string{} // HAshes of actually uploaded files
 
 	requestMeta := UploadRequestMeta{}
 	requestMetaString := r.FormValue("meta")
 	if err := json.Unmarshal([]byte(requestMetaString), &requestMeta); err != nil {
 		panic(err)
 	}
-	fmt.Println(requestMeta)
 
 	r.ParseMultipartForm(32 << 20)
 	files := r.MultipartForm.File["files"]
@@ -69,7 +78,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		hash := fmt.Sprintf("%x", h.Sum(nil))
 		hashes = append(hashes, hash)
 
-		dataFileName := filepath.Join(".", "storage", "data", hash)
+		dataFileName := filepath.Join(storagePath, "data", hash)
 		if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 			err = ioutil.WriteFile(dataFileName, data, 0644)
 
@@ -77,25 +86,62 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Error writing file", 500)
 				return
 			} else {
-				metaFileName := filepath.Join(".", "storage", "meta", hash)
+				metaFileName := filepath.Join(storagePath, "meta", hash)
 
 				fileMeta := FileMeta{
+					IP:          GetIP(r),
+					Timestamp:   time.Now(),
 					ACL:         map[string]int{requestMeta.Owner: RoleOwner},
 					Filename:    handler.Filename,
 					ContentType: handler.Header.Get("Content-Type"),
 				}
 
 				meta, _ := json.Marshal(fileMeta)
-
 				_ = ioutil.WriteFile(metaFileName, meta, 0644)
+
+				// Creating user's directory if necessary
+				storageUserPath := filepath.Join(storagePath, "users", requestMeta.Owner)
+				if _, err := os.Stat(storageUserPath); os.IsNotExist(err) {
+					os.Mkdir(storageUserPath, 0755)
+				}
+				
+				// Creating empty file hash placeholder in user's directory
+				userFileName := filepath.Join(storageUserPath, hash)
+				_ = ioutil.WriteFile(userFileName, []byte{}, 0644)
+
+				hashesUploaded = append(hashesUploaded, hash)
 			}
 		} else {
 			log.Println("Data file already exists, skipping...")
 		}
 	}
 
+	// TODO: check signature
+
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+	if err := json.NewEncoder(w).Encode(hashesUploaded); err != nil {
+		panic(err)
+	}
+}
+
+func ListHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	address := vars["address"]
+
+	hashes := []string{}
+	files, err := ioutil.ReadDir(filepath.Join(storagePath, "users", address))
+    if err == nil {
+	    for _, f := range files {
+    		hashes = append(hashes, f.Name())
+    	}
+    }
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 

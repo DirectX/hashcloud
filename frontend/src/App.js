@@ -40,8 +40,9 @@ class App extends Component {
       balance: '0',
       metamaskWarningOpen: false,
       web3js: new Web3(window.web3.currentProvider),
-      files: [],
-      result: '',
+      newFiles: [],
+      result: [],
+      uploaded: false,
     };
 
     this.onSelectFiles = this.onSelectFiles.bind(this);
@@ -66,6 +67,17 @@ class App extends Component {
     } else {
       return '0';
     }
+  }
+
+  filePanelClass(file) {
+    if (file.uploaded) {
+      if (file.stored)
+        return "bg-success text-white"
+      else
+        return "bg-secondary text-white"
+    }
+
+    return "";
   }
 
   async setMetaMaskAccount() {
@@ -115,28 +127,29 @@ class App extends Component {
 
     let files = await Promise.all(promises);
 
-    this.setState({ files: files, totalSize: totalSize, fileCount: fileCount });
+    this.setState({ newFiles: files, totalSize: totalSize, fileCount: fileCount });
   }
 
   async onUpload(event) {
     try {
+      let files = this.state.newFiles;
       let hashes = [];
-      for (const file of this.state.files) {
+
+      files.map(file => {
         hashes.push(file.hash);
-      }
+      });
+      
       const allHashString = hashes.join('+');
       const dataHash = this.state.web3js.utils.sha3(allHashString);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
-      //const recoveredSender = await this.state.web3js.eth.personal.ecRecover(dataHash, signature) === this.state.account.toLowerCase();
-      //console.log(signature, recoveredSender);
-
-      let metaData = { owner: this.state.account, signature: signature };
 
       let data = new FormData()
-      data.append('meta', JSON.stringify(metaData));
-      for (const file of this.state.files) {
+
+      data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
+      
+      files.map(file => {
         data.append('files', file.file, file.file.name);
-      }
+      });
 
       let result = await fetch('http://localhost:3010/upload', {
         method: 'POST',
@@ -144,15 +157,20 @@ class App extends Component {
       });
 
       let resultJson = await result.json();
-    
-      this.setState({ result: resultJson });
+
+      files.map(file => {
+        file.uploaded = true;
+        file.stored = resultJson.includes(file.hash);
+      });
+
+      this.setState({ newFiles: files, result: resultJson, uploaded: true });
     } catch(err) {
       console.log(err);
     }
   }
 
   async onCancel(event) {
-    this.setState({ files: [], result: [] });
+    this.setState({ newFiles: [], result: [], uploaded: false });
   }
 
   render() {
@@ -182,17 +200,17 @@ class App extends Component {
           <Alert color="info" isOpen={this.state.metamaskWarningOpen} toggle={this.onDismissMetamaskInfo}>
             Please unlock MetaMask account and select Rinkeby test network
           </Alert>
-          <h1 className="mx-3">Upload to the Cloud</h1>
-          <div hidden={this.state.files.length !== 0} className="files-panel">
+          <h1 className="mx-3">Cloud Storage</h1>
+          <div hidden={this.state.newFiles.length !== 0} className="files-panel">
             <Form className="mx-3">
               <FormGroup>
-                <CustomInput type="file" id="fileBrowser" name="file" label="Select files..." onChange={this.onSelectFiles} multiple />
+                <CustomInput type="file" id="fileBrowser" name="file" label="Select and upload new files..." onChange={this.onSelectFiles} multiple />
               </FormGroup>
             </Form>
           </div>
-          <div hidden={this.state.files.length === 0} className="files-panel">
-            {this.state.files.map(function (file) {
-              return <Container className="file-panel p-3 shadow">
+          <div hidden={this.state.newFiles.length === 0} className="files-panel">
+            {this.state.newFiles.map(file => {
+              return <Container className={"file-panel p-3 shadow " + this.filePanelClass(file)}>
                 <Row className="lead align-items-center">
                   <Col className="col-7 text-truncate" title={file.file.name}><span className="font-weight-bold">{file.file.name}</span></Col>
                   <Col className="col-3 text-muted">{file.file.type}</Col>
@@ -201,7 +219,7 @@ class App extends Component {
               </Container>
             }, this)}
           </div>
-          <div hidden={this.state.files.length === 0} className="files-panel">
+          <div hidden={this.state.uploaded || this.state.newFiles.length === 0} className="files-panel">
             <h2 className="mx-3">Summary</h2>
             <div className="container lead">
               <div className="row justify-content-start">
@@ -231,13 +249,17 @@ class App extends Component {
             </div>
             <br />
             <div className="text-center">
-              <Button className="mr-2" color="success" size="lg" onClick={this.onUpload}>Upload</Button>
+              <Button className="mr-2" color="success" size="lg" onClick={this.onUpload}>Sign and Upload&hellip;</Button>
               <Button color="secondary" size="lg" onClick={this.onCancel}>Cancel</Button>
             </div>
           </div>
-          <div hidden={!this.state.result} className="files-panel">
-            <h2 className="mx-3">Result</h2>
-            <pre><code>{this.state.result}</code></pre>
+          <div hidden={!this.state.uploaded || this.state.newFiles.length === 0} className="files-panel">
+            <div className="text-center">
+              <Button color="primary" size="lg" onClick={this.onCancel}>Done</Button>
+            </div>
+          </div>
+          <div className="files-panel">
+            <h2 className="mx-3">My Files</h2>
           </div>
         </Container>
       </div>
