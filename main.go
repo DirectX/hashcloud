@@ -186,19 +186,23 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 			var fileMeta FileMeta
 			json.Unmarshal(meta, &fileMeta)
 
-			dataFileName := filepath.Join(".", "storage", "data", hash)
-
-			if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
-				http.NotFound(w, r)
+			if fileMeta.ACL[requestMeta.Owner] == 0 {
+				http.Error(w, "Forbidden", 403)
 			} else {
-				// TODO: check signature and owner
+				dataFileName := filepath.Join(".", "storage", "data", hash)
 
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-				w.Header().Set("Access-Control-Allow-Methods", "POST")
-				w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
-				w.Header().Set("Content-Type", fileMeta.ContentType)
+				if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
+					http.NotFound(w, r)
+				} else {
+					// TODO: check signature
 
-				http.ServeFile(w, r, dataFileName)
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+					w.Header().Set("Access-Control-Allow-Methods", "POST")
+					w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+					w.Header().Set("Content-Type", fileMeta.ContentType)
+
+					http.ServeFile(w, r, dataFileName)
+				}
 			}
 		}
 	}
