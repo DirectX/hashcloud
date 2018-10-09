@@ -105,7 +105,7 @@ class App extends Component {
   async loadUserFiles() {
     const account = this.state.account;
 
-    let result = await fetch(`http://localhost:3010/api/v1/list/${account}`, {
+    let result = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/list/${account}`, {
       method: 'GET'
     });
 
@@ -166,7 +166,7 @@ class App extends Component {
         data.append('files', file.file, file.file.name);
       });
 
-      let result = await fetch('http://localhost:3010/api/v1/upload', {
+      let result = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/upload`, {
         method: 'POST',
         body: data,
       });
@@ -199,7 +199,7 @@ class App extends Component {
       let data = new FormData()
       data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
 
-      let response = await fetch(`http://localhost:3010/api/v1/download/${hash}`, {
+      let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/download/${hash}`, {
         method: 'POST',
         body: data,
       });
@@ -229,7 +229,7 @@ class App extends Component {
             <NavItem className="text-white mr-4">
               Account: <strong>{this.state.account}</strong>
             </NavItem>
-            <NavItem className="text-white mr-3">
+            <NavItem className="text-white mr-3" hidden={true}>
               ETH Balance: <strong>{this.formatPrice(this.state.balance)}</strong>&nbsp;ETH
             </NavItem>
           </div>
@@ -302,8 +302,7 @@ class App extends Component {
             {this.state.files.map(file => {
               return <Container className="file-panel p-3 shadow">
                 <Row className="lead align-items-center">
-                  <Col className="col-5 text-truncate" title={file.filename}><span className="font-weight-bold">{file.filename}</span></Col>
-                  <Col className="col-3 text-muted">{file.contentType}</Col>
+                  <Col className="col-8 text-truncate" title={file.filename}><span className="font-weight-bold">{file.filename}</span><br />{file.hash}</Col>
                   <Col className="col-2 text-right">{humanFileSize(file.contentSize, true)}</Col>
                   <Col className="col-2 text-right"><Button color="primary" outline onClick={() => this.onDownload(file.hash, file.filename)}>Download...</Button></Col>
                 </Row>
