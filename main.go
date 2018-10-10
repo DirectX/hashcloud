@@ -38,27 +38,24 @@ func main() {
 	}
 
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/api/v1/upload", UploadHandler).Methods("POST")
-	router.HandleFunc("/api/v1/list/{address}", ListHandler).Methods("GET")
-	router.HandleFunc("/api/v1/download/{hash}", DownloadHandler).Methods("POST")
-
+	router.HandleFunc("/api/v1/users/{address}/files", UserFilesPostHandler).Queries("signature", "{signature}").Methods("POST")
+	router.HandleFunc("/api/v1/users/{address}/files", UserFilesGetHandler).Queries("signature", "{signature}").Methods("GET")
+	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileGetHandler).Queries("signature", "{signature}").Methods("GET")
+	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileUpdateHandler).Queries("signature", "{signature}").Methods("UPDATE")
+	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileDeleteHandler).Queries("signature", "{signature}").Methods("DELETE")
+	
 	log.Println("Listening at port 3010...")
 	log.Fatal(http.ListenAndServe(":3010", router))
 }
 
-func MainHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, filepath.Join(".", "html", "index.html"))
-}
+// Bulk file upload
+func UserFilesPostHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	address := vars["address"]
+	// signature := vars["signature"]
 
-func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	hashes := []string{}         // All file hashes
 	hashesUploaded := []string{} // HAshes of actually uploaded files
-
-	requestMeta := RequestMeta{}
-	requestMetaString := r.FormValue("meta")
-	if err := json.Unmarshal([]byte(requestMetaString), &requestMeta); err != nil {
-		panic(err)
-	}
 
 	r.ParseMultipartForm(32 << 20)
 	files := r.MultipartForm.File["files"]
@@ -91,7 +88,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 					Hash:        hash,
 					IP:          GetIP(r),
 					Timestamp:   time.Now(),
-					ACL:         map[string]int{requestMeta.Owner: RoleOwner},
+					ACL:         map[string]int{address: RoleOwner},
 					Filename:    handler.Filename,
 					ContentType: handler.Header.Get("Content-Type"),
 					ContentSize: handler.Size,
@@ -101,7 +98,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 				_ = ioutil.WriteFile(metaFileName, meta, 0644)
 
 				// Creating user's directory if necessary
-				storageUserPath := filepath.Join(storagePath, "users", requestMeta.Owner)
+				storageUserPath := filepath.Join(storagePath, "users", address)
 				if _, err := os.Stat(storageUserPath); os.IsNotExist(err) {
 					os.Mkdir(storageUserPath, 0755)
 				}
@@ -129,9 +126,10 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func ListHandler(w http.ResponseWriter, r *http.Request) {
+func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	address := vars["address"]
+	// signature := vars["signature"]
 
 	fileMetas := []FileMetaPublic{}
 	files, err := ioutil.ReadDir(filepath.Join(storagePath, "users", address))
@@ -154,6 +152,8 @@ func ListHandler(w http.ResponseWriter, r *http.Request) {
     	}
     }
 
+	// TODO: check signature
+
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
@@ -164,15 +164,11 @@ func ListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func DownloadHandler(w http.ResponseWriter, r *http.Request) {
+func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
+	address := vars["address"]
 	hash := vars["hash"]
-
-	requestMeta := RequestMeta{}
-	requestMetaString := r.FormValue("meta")
-	if err := json.Unmarshal([]byte(requestMetaString), &requestMeta); err != nil {
-		panic(err)
-	}
+	// signature := vars["signature"]
 
 	metaFileName := filepath.Join(".", "storage", "meta", hash)
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
@@ -186,7 +182,7 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 			var fileMeta FileMeta
 			json.Unmarshal(meta, &fileMeta)
 
-			if fileMeta.ACL[requestMeta.Owner] == 0 {
+			if fileMeta.ACL[address] == 0 {
 				http.Error(w, "Forbidden", 403)
 			} else {
 				dataFileName := filepath.Join(".", "storage", "data", hash)
@@ -206,4 +202,22 @@ func DownloadHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func UserFileUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	// vars := mux.Vars(r)
+	// address := vars["address"]
+	// hash := vars["hash"]
+	// signature := vars["signature"]
+
+	http.Error(w, "Not implemented", 500)
+}
+
+func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	// vars := mux.Vars(r)
+	// address := vars["address"]
+	// hash := vars["hash"]
+	// signature := vars["signature"]
+
+	http.Error(w, "Not implemented", 500)
 }

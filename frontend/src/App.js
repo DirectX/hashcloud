@@ -46,6 +46,7 @@ class App extends Component {
       balance: '0',
       metamaskWarningOpen: false,
       web3js: new Web3(window.web3.currentProvider),
+      autoSignatures: JSON.parse(localStorage.getItem("autoSignatures") || "{}"),
       files: [],
       newFiles: [],
       result: [],
@@ -63,6 +64,7 @@ class App extends Component {
     this.toggleDeleteModal = this.toggleDeleteModal.bind(this);
     this.openDeleteModal = this.openDeleteModal.bind(this);
     this.onDeleteSubmit = this.onDeleteSubmit.bind(this);
+    this.setRole = this.setRole.bind(this);
 
     this.state.web3js.eth.net.getNetworkType().then((networkName) => {
       if (networkName !== 'rinkeby') {
@@ -116,8 +118,21 @@ class App extends Component {
 
   async loadUserFiles() {
     const account = this.state.account;
+    let autoSignature = this.state.autoSignatures[account];
 
-    let result = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/list/${account}`, {
+    if (!autoSignature) {
+      let autoSignatures = this.state.autoSignatures;
+
+      const dataHash = this.state.web3js.utils.sha3(account);
+      autoSignature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      autoSignatures[account] = autoSignature;
+
+      this.setState({ autoSignatures: autoSignatures });
+
+      localStorage.setItem("autoSignatures", JSON.stringify(autoSignatures));
+    }
+
+    let result = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files?signature=${autoSignature}`, {
       method: 'GET'
     });
 
@@ -168,22 +183,22 @@ class App extends Component {
         hashes.push(file.hash);
       });
       
+      const account = this.state.account;
       const allHashString = hashes.join('+');
       const dataHash = this.state.web3js.utils.sha3(allHashString);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
 
-      let data = new FormData()
-      data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
+      let data = new FormData();
       files.map(file => {
         data.append('files', file.file, file.file.name);
       });
 
-      let result = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/upload`, {
+      let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files?signature=${signature}`, {
         method: 'POST',
         body: data,
       });
 
-      let resultJson = await result.json();
+      let resultJson = await response.json();
 
       files.map(file => {
         file.uploaded = true;
@@ -205,26 +220,22 @@ class App extends Component {
 
   async onDownload(hash, filename) {
     try {
+      const account = this.state.account;
       const dataHash = this.state.web3js.utils.sha3(hash);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
 
-      let data = new FormData()
-      data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
-
-      let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/download/${hash}`, {
-        method: 'POST',
-        body: data,
+      let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
+        method: 'GET',
       });
 
       let blob = await response.blob();
 
       FileSaver.saveAs(blob, filename);
     } catch (err) {
-      alert('Unathorized');
     }
   }
 
-   toggleShareModal(hash) {
+  toggleShareModal() {
     this.setState({ shareModalOpen: !this.state.shareModalOpen });
   }
 
@@ -233,23 +244,46 @@ class App extends Component {
       shareModalOpen: true,
       shareHash: hash,
       shareAddress: '',
+      shareRole: 3,
     });
   }
 
   handleAddressChange(event) {
-    this.setState({shareAddress: event.target.value});
+    this.setState({ shareAddress: event.target.value });
   }
 
   async onShareSubmit(event) {
     event.preventDefault();
 
     try {
-    } catch(err) {
-      console.log('Error:', err);
-    };
+      const account = this.state.account;
+      const dataHash = this.state.web3js.utils.sha3(hash);
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      const hash = this.state.shareHash;
+
+      const shareAccount = this.state.shareAccount;
+      if (!shareAccount)
+        return;
+
+      const shareRole = this.state.shareRole;
+      if (shareRole !== 2 && shareRole !== 3)
+        return;
+
+      let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
+        method: 'UPDATE',
+        body: JSON.stringify({ [shareAccount]: shareRole }),
+      });
+
+      let resultJson = await response.json();
+
+      this.toggleShareModal();
+    } catch (err) {
+      alert("Not implemented");
+      this.toggleShareModal();
+    }
   }
 
-  toggleDeleteModal(hash) {
+  toggleDeleteModal() {
     this.setState({ deleteModalOpen: !this.state.deleteModalOpen });
   }
 
@@ -263,18 +297,28 @@ class App extends Component {
   async onDeleteSubmit(event) {
     event.preventDefault();
 
-    const self = this;
-    const hash = this.state.deleteHash;
-    const url = `${process.env.REACT_APP_API_URL_PREFIX}/${hash}`;
-
     try {
-      const response = await fetch(url, {
+      const account = this.state.account;
+      const dataHash = this.state.web3js.utils.sha3(hash);
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      const hash = this.state.deleteHash;
+
+      let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
         method: 'DELETE',
       });
-    } 
-    catch (err) {  
-      console.log('Request error:', err);
+
+      let resultJson = await response.json();
+
+      this.toggleDeleteModal();
+    } catch (err) {
+      alert("Not implemented");
+      this.toggleDeleteModal();
     }
+  }
+
+  setRole(event) {
+    const { name, value } = event.target;
+    this.setState({ [name]: value });
   }
 
   // async onShare(hash) {
@@ -415,8 +459,8 @@ class App extends Component {
                   <Col className="col-2 text-right">{humanFileSize(file.contentSize, true)}</Col>
                   <Col className="col-2 text-right">
                     <Button color="success" onClick={() => this.onDownload(file.hash, file.filename)} title="Download"><FontAwesomeIcon className="fa-fw" icon="download" /></Button>
-                    <Button className="ml-2" color="primary" onClick={() => this.openShareModal(file.hash)} title="Share"><FontAwesomeIcon className="fa-fw" icon="share-alt" /></Button>
-                    <Button className="ml-2" color="danger" onClick={() => this.openDeleteModal(file.hash)} title="Delete"><FontAwesomeIcon className="fa-fw" icon="trash" /></Button>
+                    <Button className="mt-2 mt-lg-0 ml-2" color="primary" onClick={() => this.openShareModal(file.hash)} title="Share"><FontAwesomeIcon className="fa-fw" icon="share-alt" /></Button>
+                    <Button className="mt-2 mt-xl-0 ml-2" color="danger" onClick={() => this.openDeleteModal(file.hash)} title="Delete"><FontAwesomeIcon className="fa-fw" icon="trash" /></Button>
                   </Col>
                 </Row>
               </Container>
@@ -430,6 +474,23 @@ class App extends Component {
                   <Label for="addressTo" sm={2}>Address</Label>
                   <Col sm={10}>
                     <Input type="text" name="addressTo" id="addressTo" placeholder="0x0000000000000000000000000000000000000000" value={this.state.shareAddress} onChange={this.handleAddressChange} />
+                  </Col>
+                </FormGroup>
+                <FormGroup row>
+                  <Label for="addressTo" sm={2}>Role</Label>
+                  <Col sm={10} onChange={this.setRole.bind(this)}>
+                    <FormGroup check className="mt-2">
+                      <Label check>
+                        <Input type="radio" name="shareRole" value="2" />{' '}
+                        Manager (can share file)
+                      </Label>
+                    </FormGroup>
+                    <FormGroup check>
+                      <Label check>
+                        <Input type="radio" name="shareRole" value="3" defaultChecked={true} />{' '}
+                        Viewer
+                      </Label>
+                    </FormGroup>
                   </Col>
                 </FormGroup>
               </ModalBody>
