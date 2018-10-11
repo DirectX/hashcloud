@@ -206,7 +206,7 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 	hash := vars["hash"]
 	// signature := vars["signature"]
 
-	metaFileName := filepath.Join(".", "storage", "meta", hash)
+	metaFileName := filepath.Join(storagePath, "meta", hash)
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
 		http.NotFound(w, r)
 	} else {
@@ -222,7 +222,7 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 			if !ok || !(currentUserRole == RoleOwner || currentUserRole == RoleManager || currentUserRole == RoleViewer) {
 				http.Error(w, "Forbidden", 403)
 			} else {
-				dataFileName := filepath.Join(".", "storage", "data", hash)
+				dataFileName := filepath.Join(storagePath, "data", hash)
 
 				if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 					http.NotFound(w, r)
@@ -247,7 +247,7 @@ func UserFileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	hash := vars["hash"]
 	// signature := vars["signature"]
 
-	metaFileName := filepath.Join(".", "storage", "meta", hash)
+	metaFileName := filepath.Join(storagePath, "meta", hash)
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
 		http.NotFound(w, r)
 	} else {
@@ -362,12 +362,15 @@ func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 					userFileName := filepath.Join(storagePath, "users", address, hash)
 					os.Remove(userFileName)
+
+					storageUserPath := filepath.Join(storagePath, "users", address)
+					os.Remove(storageUserPath)
 				}
 
-				metaFileName := filepath.Join(".", "storage", "meta", hash)
+				metaFileName := filepath.Join(storagePath, "meta", hash)
 				os.Remove(metaFileName)
 
-				dataFileName := filepath.Join(".", "storage", "data", hash)
+				dataFileName := filepath.Join(storagePath, "data", hash)
 				os.Remove(dataFileName)
 
 				response := Response{
