@@ -257,9 +257,11 @@ class App extends Component {
     event.preventDefault();
 
     try {
-      const shareAddress = this.state.shareAddress;
+      let shareAddress = this.state.shareAddress;
       if (!shareAddress || !this.state.web3js.utils.isAddress(shareAddress))
         return;
+
+      shareAddress = this.state.web3js.utils.toChecksumAddress(shareAddress)
 
       const shareRole = parseInt(this.state.shareRole);
       if (shareRole !== 2 && shareRole !== 3)
@@ -351,7 +353,6 @@ class App extends Component {
           <Alert color="info" isOpen={this.state.metamaskWarningOpen} toggle={this.onDismissMetamaskInfo}>
             Please unlock MetaMask account and select Rinkeby test network
           </Alert>
-          <h1 className="mx-3">Cloud Storage</h1>
           <div hidden={this.state.newFiles.length !== 0} className="files-panel">
             <Form className="mx-3">
               <FormGroup>
