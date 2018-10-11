@@ -38,14 +38,34 @@ func main() {
 	}
 
 	router := mux.NewRouter().StrictSlash(true)
+	router.HandleFunc("/api/v1/users/{address}/files", UserFilesOptionsHandler).Queries("signature", "{signature}").Methods("OPTIONS")
 	router.HandleFunc("/api/v1/users/{address}/files", UserFilesPostHandler).Queries("signature", "{signature}").Methods("POST")
 	router.HandleFunc("/api/v1/users/{address}/files", UserFilesGetHandler).Queries("signature", "{signature}").Methods("GET")
+	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileOptionsHandler).Queries("signature", "{signature}").Methods("OPTIONS")
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileGetHandler).Queries("signature", "{signature}").Methods("GET")
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileUpdateHandler).Queries("signature", "{signature}").Methods("UPDATE")
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileDeleteHandler).Queries("signature", "{signature}").Methods("DELETE")
 	
 	log.Println("Listening at port 3010...")
 	log.Fatal(http.ListenAndServe(":3010", router))
+}
+
+func UserFilesOptionsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Options")
+
+	response := Response{
+		OK: true,
+		ErrorMessage: "",
+	}
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET,POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		panic(err)
+	}
 }
 
 // Bulk file upload
@@ -133,9 +153,9 @@ func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 
 	fileMetas := []FileMetaPublic{}
 	files, err := ioutil.ReadDir(filepath.Join(storagePath, "users", address))
-    if err == nil {
-	    for _, f := range files {
-    		hash := f.Name()
+	if err == nil {
+		for _, f := range files {
+			hash := f.Name()
 
 			jsonFile, err := os.Open(filepath.Join(storagePath, "meta", hash))
 			if err != nil {
@@ -149,17 +169,33 @@ func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 			json.Unmarshal(byteValue, &fileMeta)
 
 			fileMetas = append(fileMetas, fileMeta)
-    	}
-    }
+		}
+	}
 
 	// TODO: check signature
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	if err := json.NewEncoder(w).Encode(fileMetas); err != nil {
+		panic(err)
+	}
+}
+
+func UserFileOptionsHandler(w http.ResponseWriter, r *http.Request) {
+	response := Response{
+		OK: true,
+		ErrorMessage: "",
+	}
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET,UPDATE,DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		panic(err)
 	}
 }
@@ -182,7 +218,8 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 			var fileMeta FileMeta
 			json.Unmarshal(meta, &fileMeta)
 
-			if fileMeta.ACL[address] == 0 {
+			currentUserRole, ok := fileMeta.ACL[address]
+			if !ok || !(currentUserRole == RoleOwner || currentUserRole == RoleManager || currentUserRole == RoleViewer) {
 				http.Error(w, "Forbidden", 403)
 			} else {
 				dataFileName := filepath.Join(".", "storage", "data", hash)
@@ -193,7 +230,7 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 					// TODO: check signature
 
 					w.Header().Set("Access-Control-Allow-Origin", "*")
-					w.Header().Set("Access-Control-Allow-Methods", "POST")
+					w.Header().Set("Access-Control-Allow-Methods", "GET")
 					w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 					w.Header().Set("Content-Type", fileMeta.ContentType)
 
@@ -205,19 +242,148 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func UserFileUpdateHandler(w http.ResponseWriter, r *http.Request) {
-	// vars := mux.Vars(r)
-	// address := vars["address"]
-	// hash := vars["hash"]
+	vars := mux.Vars(r)
+	address := vars["address"]
+	hash := vars["hash"]
 	// signature := vars["signature"]
 
-	http.Error(w, "Not implemented", 500)
+	metaFileName := filepath.Join(".", "storage", "meta", hash)
+	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
+		http.NotFound(w, r)
+	} else {
+		meta, err := ioutil.ReadFile(metaFileName)
+
+		if err != nil {
+			http.Error(w, "Error reading file", 500)
+		} else {
+			var fileMeta FileMeta
+			json.Unmarshal(meta, &fileMeta)
+
+			if fileMeta.ACL[address] == RoleNone || fileMeta.ACL[address] == RoleViewer {
+				http.Error(w, "Forbidden", 403)
+			} else {
+				currentUserRole, ok := fileMeta.ACL[address]
+				if !ok || !(currentUserRole == RoleOwner || currentUserRole == RoleManager) {
+					http.Error(w, "Forbidden", 403)
+				}
+
+				// TODO: check signature
+
+				b, err := ioutil.ReadAll(r.Body)
+				defer r.Body.Close()
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+
+				var newACL ACL
+				err = json.Unmarshal(b, &newACL)
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+
+				for newAddress, newRole := range newACL {
+					if address != newAddress {
+						if newRole > currentUserRole || newRole == RoleNone {
+							if newRole != RoleNone {
+								fileMeta.ACL[newAddress] = newRole
+
+								// Creating user's directory if necessary
+								storageUserPath := filepath.Join(storagePath, "users", newAddress)
+								if _, err := os.Stat(storageUserPath); os.IsNotExist(err) {
+									os.Mkdir(storageUserPath, 0755)
+								}
+
+								// Creating empty file hash placeholder in user's directory
+								userFileName := filepath.Join(storageUserPath, hash)
+								_ = ioutil.WriteFile(userFileName, []byte{}, 0644)
+							} else {
+								delete(fileMeta.ACL, newAddress)
+
+								userFileName := filepath.Join(storagePath, "users", newAddress, hash)
+								os.Remove(userFileName)
+							}
+						}
+					}
+				}
+
+				meta, _ := json.Marshal(fileMeta)
+				_ = ioutil.WriteFile(metaFileName, meta, 0644)
+
+				response := Response{
+					OK: true,
+					ErrorMessage: "",
+				}
+
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("Access-Control-Allow-Methods", "UPDATE")
+				w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+				w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+				if err := json.NewEncoder(w).Encode(response); err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
 }
 
 func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	// vars := mux.Vars(r)
-	// address := vars["address"]
-	// hash := vars["hash"]
+	vars := mux.Vars(r)
+	address := vars["address"]
+	hash := vars["hash"]
 	// signature := vars["signature"]
 
-	http.Error(w, "Not implemented", 500)
+	metaFileName := filepath.Join(".", "storage", "meta", hash)
+	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
+		http.NotFound(w, r)
+	} else {
+		meta, err := ioutil.ReadFile(metaFileName)
+
+		if err != nil {
+			http.Error(w, "Error reading file", 500)
+		} else {
+			var fileMeta FileMeta
+			json.Unmarshal(meta, &fileMeta)
+
+			if fileMeta.ACL[address] != RoleOwner {
+				http.Error(w, "Forbidden", 403)
+			} else {
+				currentUserRole, ok := fileMeta.ACL[address]
+				if !ok || currentUserRole != RoleOwner {
+					http.Error(w, "Forbidden", 403)
+				}
+
+				// TODO: check signature
+
+				for address, _ := range fileMeta.ACL {
+					delete(fileMeta.ACL, address)
+
+					userFileName := filepath.Join(storagePath, "users", address, hash)
+					os.Remove(userFileName)
+				}
+
+				metaFileName := filepath.Join(".", "storage", "meta", hash)
+				os.Remove(metaFileName)
+
+				dataFileName := filepath.Join(".", "storage", "data", hash)
+				os.Remove(dataFileName)
+
+				response := Response{
+					OK: true,
+					ErrorMessage: "",
+				}
+
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("Access-Control-Allow-Methods", "DELETE")
+				w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+				w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
+				if err := json.NewEncoder(w).Encode(response); err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
 }

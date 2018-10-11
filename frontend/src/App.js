@@ -74,6 +74,7 @@ class App extends Component {
           this.setMetaMaskAccount();
         });
         this.setMetaMaskAccount();
+        this.setState({ metamaskWarningOpen: false });
       }
     });
   }
@@ -256,30 +257,30 @@ class App extends Component {
     event.preventDefault();
 
     try {
-      const account = this.state.account;
-      const dataHash = this.state.web3js.utils.sha3(hash);
-      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
-      const hash = this.state.shareHash;
-
-      const shareAccount = this.state.shareAccount;
-      if (!shareAccount)
+      const shareAddress = this.state.shareAddress;
+      if (!shareAddress || !this.state.web3js.utils.isAddress(shareAddress))
         return;
 
-      const shareRole = this.state.shareRole;
+      const shareRole = parseInt(this.state.shareRole);
       if (shareRole !== 2 && shareRole !== 3)
         return;
 
+      const account = this.state.account;
+      const hash = this.state.shareHash;
+      const dataHash = this.state.web3js.utils.sha3(hash);
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      const acl = { [shareAddress]: shareRole };
+
       let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
         method: 'UPDATE',
-        body: JSON.stringify({ [shareAccount]: shareRole }),
+        body: JSON.stringify(acl),
       });
 
       let resultJson = await response.json();
 
       this.toggleShareModal();
     } catch (err) {
-      alert("Not implemented");
-      this.toggleShareModal();
+      console.log(err);
     }
   }
 
@@ -299,9 +300,9 @@ class App extends Component {
 
     try {
       const account = this.state.account;
+      const hash = this.state.deleteHash;
       const dataHash = this.state.web3js.utils.sha3(hash);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
-      const hash = this.state.deleteHash;
 
       let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
         method: 'DELETE',
@@ -309,10 +310,12 @@ class App extends Component {
 
       let resultJson = await response.json();
 
-      this.toggleDeleteModal();
+      if (resultJson.ok) {
+        this.toggleDeleteModal();
+        this.loadUserFiles();
+      }
     } catch (err) {
-      alert("Not implemented");
-      this.toggleDeleteModal();
+      console.log(err);
     }
   }
 
@@ -320,50 +323,6 @@ class App extends Component {
     const { name, value } = event.target;
     this.setState({ [name]: value });
   }
-
-  // async onShare(hash) {
-  //   try {
-  //     console.log('Share');
-  //     // const dataHash = this.state.web3js.utils.sha3(hash);
-  //     // const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
-
-  //     // let data = new FormData()
-  //     // data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
-
-  //     // let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/download/${hash}`, {
-  //     //   method: 'POST',
-  //     //   body: data,
-  //     // });
-
-  //     // let blob = await response.blob();
-
-  //     // FileSaver.saveAs(blob, filename);
-  //   } catch (err) {
-  //     alert('Unathorized');
-  //   }
-  // }
-
-  // async onDelete(hash) {
-  //   try {
-  //     console.log('Remove');
-  //     // const dataHash = this.state.web3js.utils.sha3(hash);
-  //     // const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
-
-  //     // let data = new FormData()
-  //     // data.append('meta', JSON.stringify({ owner: this.state.account, signature: signature }));
-
-  //     // let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/download/${hash}`, {
-  //     //   method: 'POST',
-  //     //   body: data,
-  //     // });
-
-  //     // let blob = await response.blob();
-
-  //     // FileSaver.saveAs(blob, filename);
-  //   } catch (err) {
-  //     alert('Unathorized');
-  //   }
-  // }
 
   render() {
     return (
@@ -459,8 +418,8 @@ class App extends Component {
                   <Col className="col-2 text-right">{humanFileSize(file.contentSize, true)}</Col>
                   <Col className="col-2 text-right">
                     <Button color="success" onClick={() => this.onDownload(file.hash, file.filename)} title="Download"><FontAwesomeIcon className="fa-fw" icon="download" /></Button>
-                    <Button className="mt-2 mt-lg-0 ml-2" color="primary" onClick={() => this.openShareModal(file.hash)} title="Share"><FontAwesomeIcon className="fa-fw" icon="share-alt" /></Button>
-                    <Button className="mt-2 mt-xl-0 ml-2" color="danger" onClick={() => this.openDeleteModal(file.hash)} title="Delete"><FontAwesomeIcon className="fa-fw" icon="trash" /></Button>
+                    <Button className="mt-2 mt-lg-0 ml-2" color="primary" onClick={() => this.openShareModal(file.hash)} title="Share" outline={file.acl[this.state.account] == 3} disabled={file.acl[this.state.account] == 3}><FontAwesomeIcon className="fa-fw" icon="share-alt" /></Button>
+                    <Button className="mt-2 mt-xl-0 ml-2" color="danger" onClick={() => this.openDeleteModal(file.hash)} title="Delete" outline={file.acl[this.state.account] != 1} disabled={file.acl[this.state.account] != 1}><FontAwesomeIcon className="fa-fw" icon="trash" /></Button>
                   </Col>
                 </Row>
               </Container>
