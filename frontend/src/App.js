@@ -6,25 +6,33 @@ import { Alert, Button, Container, Form, FormGroup, CustomInput, Nav, NavItem, N
 import Web3 from 'web3';
 import FileSaver from 'file-saver';
 import { sha256Hash } from './sha256';
+import { HashCloudAPI } from './hashcloud-js/api';
 import './App.css';
 
 library.add(faDownload, faShareAlt, faTrash);
 
+let hc = new HashCloudAPI({ apiUrl: "http://yandex.ru" });
+hc.test();
+
 function humanFileSize(bytes, si) {
   var thresh = si ? 1000 : 1024;
 
-  if(Math.abs(bytes) < thresh) {
+  if (Math.abs(bytes) < thresh) {
     return bytes + ' B';
   }
+  
   var units = si
     ? ['kB','MB','GB','TB','PB','EB','ZB','YB']
     : ['KiB','MiB','GiB','TiB','PiB','EiB','ZiB','YiB'];
+  
   var u = -1;
+  
   do {
     bytes /= thresh;
     ++u;
-  } while(Math.abs(bytes) >= thresh && u < units.length - 1);
-  return bytes.toFixed(1)+' '+units[u];
+  } while (Math.abs(bytes) >= thresh && u < units.length - 1);
+  
+  return bytes.toFixed(1) + ' ' + units[u];
 }
 
 class App extends Component {
@@ -184,7 +192,7 @@ class App extends Component {
       });
       
       const account = this.state.account;
-      const allHashString = hashes.join('+');
+      const allHashString = 'upload+' + hashes.join('+');
       const dataHash = this.state.web3js.utils.sha3(allHashString);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
 
@@ -221,7 +229,7 @@ class App extends Component {
   async onDownload(hash, filename) {
     try {
       const account = this.state.account;
-      const dataHash = this.state.web3js.utils.sha3(hash);
+      const dataHash = 'download+' + this.state.web3js.utils.sha3(hash);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
 
       let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
@@ -267,7 +275,7 @@ class App extends Component {
         return;
 
       const account = this.state.account;
-      const hash = this.state.shareHash;
+      const hash = 'share+' + this.state.shareHash;
       const dataHash = this.state.web3js.utils.sha3(hash);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
       const acl = { [shareAddress]: shareRole };
@@ -301,7 +309,7 @@ class App extends Component {
 
     try {
       const account = this.state.account;
-      const hash = this.state.deleteHash;
+      const hash = 'delete+' + this.state.deleteHash;
       const dataHash = this.state.web3js.utils.sha3(hash);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
 
