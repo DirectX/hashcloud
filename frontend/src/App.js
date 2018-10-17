@@ -74,7 +74,6 @@ class App extends Component {
           this.setMetaMaskAccount();
         });
         this.setMetaMaskAccount();
-        this.setState({ metamaskWarningOpen: false });
       }
     });
   }
@@ -103,7 +102,7 @@ class App extends Component {
 
     let accounts = await this.state.web3js.eth.getAccounts();
     if (accounts.length === 0) {
-      this.setState({ metamaskWarningOpen: true });
+      this.setState({ account: null, files: [], metamaskWarningOpen: true });
       return;
     }
 
@@ -111,7 +110,7 @@ class App extends Component {
 
     if (account && this.state.account !== account) {
       let balance = await this.state.web3js.eth.getBalance(account);
-      self.setState({ account: accounts[0], balance: balance.toString() });
+      self.setState({ account: accounts[0], balance: balance.toString(), metamaskWarningOpen: false });
 
       this.loadUserFiles();
     }
