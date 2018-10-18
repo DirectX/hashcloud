@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"strings"
 )
 
 var storagePath string
@@ -72,10 +73,10 @@ func UserFilesOptionsHandler(w http.ResponseWriter, r *http.Request) {
 func UserFilesPostHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	address := vars["address"]
-	// signature := vars["signature"]
+	signature := vars["signature"]
 
 	hashes := []string{}         // All file hashes
-	hashesUploaded := []string{} // HAshes of actually uploaded files
+	hashesUploaded := []string{} // Hashes of actually uploaded files
 
 	r.ParseMultipartForm(32 << 20)
 	files := r.MultipartForm.File["files"]
@@ -134,22 +135,25 @@ func UserFilesPostHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// TODO: check signature
+	if CheckSignature("upload+" + strings.Join(hashes, "+"), signature, address) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST")
-	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-
-	if err := json.NewEncoder(w).Encode(hashesUploaded); err != nil {
-		panic(err)
+		if err := json.NewEncoder(w).Encode(hashesUploaded); err != nil {
+			panic(err)
+		}
+	} else {
+		http.Error(w, "Forbidden", 403)
+		return
 	}
 }
 
 func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	address := vars["address"]
-	// signature := vars["signature"]
+	signature := vars["signature"]
 
 	fileMetas := []FileMetaPublic{}
 	files, err := ioutil.ReadDir(filepath.Join(storagePath, "users", address))
@@ -172,15 +176,18 @@ func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// TODO: check signature
+	if CheckSignature("list+" + address, signature, address) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET")
-	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-
-	if err := json.NewEncoder(w).Encode(fileMetas); err != nil {
-		panic(err)
+		if err := json.NewEncoder(w).Encode(fileMetas); err != nil {
+			panic(err)
+		}
+	} else {
+		http.Error(w, "Forbidden", 403)
+		return
 	}
 }
 
@@ -204,7 +211,7 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	address := vars["address"]
 	hash := vars["hash"]
-	// signature := vars["signature"]
+	signature := vars["signature"]
 
 	metaFileName := filepath.Join(storagePath, "meta", hash)
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
@@ -227,14 +234,16 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 				if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 					http.NotFound(w, r)
 				} else {
-					// TODO: check signature
-
-					w.Header().Set("Access-Control-Allow-Origin", "*")
-					w.Header().Set("Access-Control-Allow-Methods", "GET")
-					w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
-					w.Header().Set("Content-Type", fileMeta.ContentType)
-
-					http.ServeFile(w, r, dataFileName)
+					if CheckSignature("download+" + hash, signature, address) {
+						w.Header().Set("Access-Control-Allow-Origin", "*")
+						w.Header().Set("Access-Control-Allow-Methods", "GET")
+						w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+						w.Header().Set("Content-Type", fileMeta.ContentType)
+						http.ServeFile(w, r, dataFileName)
+					} else {
+						http.Error(w, "Forbidden", 403)
+						return
+					}
 				}
 			}
 		}

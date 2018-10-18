@@ -11,7 +11,7 @@ import './App.css';
 
 library.add(faDownload, faShareAlt, faTrash);
 
-let hc = new HashCloudAPI({ apiUrl: "http://yandex.ru" });
+let hc = new HashCloudAPI({ apiUrl: "http://example.com" });
 hc.test();
 
 function humanFileSize(bytes, si) {
@@ -131,7 +131,7 @@ class App extends Component {
     if (!autoSignature) {
       let autoSignatures = this.state.autoSignatures;
 
-      const dataHash = this.state.web3js.utils.sha3(account);
+      const dataHash = this.state.web3js.utils.sha3('list+' + account);
       autoSignature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
       autoSignatures[account] = autoSignature;
 
@@ -140,13 +140,17 @@ class App extends Component {
       localStorage.setItem("autoSignatures", JSON.stringify(autoSignatures));
     }
 
-    let result = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files?signature=${autoSignature}`, {
-      method: 'GET'
-    });
+    try {
+      let result = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files?signature=${autoSignature}`, {
+        method: 'GET'
+      });
 
-    let files = await result.json();
+      let files = await result.json();
 
-    this.setState({ files: files });
+      this.setState({ files: files });
+    } catch (err) {
+      localStorage.removeItem("autoSignatures")
+    }
   }
 
   async onSelectFiles(event) {
@@ -229,7 +233,7 @@ class App extends Component {
   async onDownload(hash, filename) {
     try {
       const account = this.state.account;
-      const dataHash = 'download+' + this.state.web3js.utils.sha3(hash);
+      const dataHash = this.state.web3js.utils.sha3('download+' + hash);
       const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
 
       let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
