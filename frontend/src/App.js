@@ -94,6 +94,19 @@ class App extends Component {
     }
   }
 
+  formatRole(role) {
+    switch (role) {
+    case 1:
+      return 'Owner';
+    case 2:
+      return 'Manager';
+    case 3:
+      return 'Viewer';
+    default:
+      return 'None';
+    }
+  }
+
   filePanelClass(file) {
     if (file.uploaded) {
       if (file.stored)
@@ -433,6 +446,12 @@ class App extends Component {
                     <Button className="mt-2 mt-xl-0 ml-2" color="danger" onClick={() => this.openDeleteModal(file.hash)} title="Delete" outline={file.acl[this.state.account] != 1} disabled={file.acl[this.state.account] != 1}><FontAwesomeIcon className="fa-fw" icon="trash" /></Button>
                   </Col>
                 </Row>
+                {Object.keys(file.acl).map(key => {
+                  return <Row className="border-top pt-2 mt-2 mb-0">
+                    <Col sm={1}><strong>{this.formatRole(file.acl[key])}</strong></Col>
+                    <Col sm={11}>{key}</Col>
+                  </Row>
+                }, this)}
               </Container>
             }, this)}
           </div>

@@ -363,6 +363,7 @@ func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 				currentUserRole, ok := fileMeta.ACL[address]
 				if !ok || currentUserRole != RoleOwner {
 					http.Error(w, "Forbidden", 403)
+					return
 				}
 
 				if !CheckSignature("delete+" + hash, signature, address) {
