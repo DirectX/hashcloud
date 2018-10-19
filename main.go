@@ -146,7 +146,6 @@ func UserFilesPostHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		http.Error(w, "Forbidden", 403)
-		return
 	}
 }
 
@@ -187,7 +186,6 @@ func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		http.Error(w, "Forbidden", 403)
-		return
 	}
 }
 
@@ -242,7 +240,6 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 						http.ServeFile(w, r, dataFileName)
 					} else {
 						http.Error(w, "Forbidden", 403)
-						return
 					}
 				}
 			}
@@ -254,7 +251,7 @@ func UserFileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	address := vars["address"]
 	hash := vars["hash"]
-	// signature := vars["signature"]
+	signature := vars["signature"]
 
 	metaFileName := filepath.Join(storagePath, "meta", hash)
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
@@ -274,9 +271,13 @@ func UserFileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 				currentUserRole, ok := fileMeta.ACL[address]
 				if !ok || !(currentUserRole == RoleOwner || currentUserRole == RoleManager) {
 					http.Error(w, "Forbidden", 403)
+					return
 				}
 
-				// TODO: check signature
+				if !CheckSignature("share+" + hash, signature, address) {
+					http.Error(w, "Forbidden", 403)
+					return
+				}
 
 				b, err := ioutil.ReadAll(r.Body)
 				defer r.Body.Close()
@@ -342,7 +343,7 @@ func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	address := vars["address"]
 	hash := vars["hash"]
-	// signature := vars["signature"]
+	signature := vars["signature"]
 
 	metaFileName := filepath.Join(".", "storage", "meta", hash)
 	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
@@ -364,7 +365,10 @@ func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "Forbidden", 403)
 				}
 
-				// TODO: check signature
+				if !CheckSignature("delete+" + hash, signature, address) {
+					http.Error(w, "Forbidden", 403)
+					return
+				}
 
 				for address, _ := range fileMeta.ACL {
 					delete(fileMeta.ACL, address)

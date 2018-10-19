@@ -132,7 +132,7 @@ class App extends Component {
       let autoSignatures = this.state.autoSignatures;
 
       const dataHash = this.state.web3js.utils.sha3('list+' + account);
-      autoSignature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      autoSignature = await this.state.web3js.eth.personal.sign(dataHash, account);
       autoSignatures[account] = autoSignature;
 
       this.setState({ autoSignatures: autoSignatures });
@@ -196,9 +196,8 @@ class App extends Component {
       });
       
       const account = this.state.account;
-      const allHashString = 'upload+' + hashes.join('+');
-      const dataHash = this.state.web3js.utils.sha3(allHashString);
-      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      const dataHash = this.state.web3js.utils.sha3('upload+' + hashes.join('+'));
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, account);
 
       let data = new FormData();
       files.map(file => {
@@ -234,7 +233,7 @@ class App extends Component {
     try {
       const account = this.state.account;
       const dataHash = this.state.web3js.utils.sha3('download+' + hash);
-      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, account);
 
       let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
         method: 'GET',
@@ -279,9 +278,9 @@ class App extends Component {
         return;
 
       const account = this.state.account;
-      const hash = 'share+' + this.state.shareHash;
-      const dataHash = this.state.web3js.utils.sha3(hash);
-      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      const hash = this.state.shareHash;
+      const dataHash = this.state.web3js.utils.sha3('share+' + this.state.shareHash);
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, account);
       const acl = { [shareAddress]: shareRole };
 
       let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
@@ -313,9 +312,9 @@ class App extends Component {
 
     try {
       const account = this.state.account;
-      const hash = 'delete+' + this.state.deleteHash;
-      const dataHash = this.state.web3js.utils.sha3(hash);
-      const signature = await this.state.web3js.eth.personal.sign(dataHash, this.state.account);
+      const hash = this.state.deleteHash;
+      const dataHash = this.state.web3js.utils.sha3('delete+' + this.state.deleteHash);
+      const signature = await this.state.web3js.eth.personal.sign(dataHash, account);
 
       let response = await fetch(`${process.env.REACT_APP_API_URL_PREFIX}/users/${account}/files/${hash}?signature=${signature}`, {
         method: 'DELETE',
