@@ -437,7 +437,7 @@ class App extends Component {
             <h2 className="mx-3">My Files</h2>
             {this.state.files.map(file => {
               return <Container className="file-panel p-3 shadow">
-                <Row className="lead align-items-center">
+                <Row className="lead align-items-center border-bottom pb-2 mb-2">
                   <Col className="col-8 text-truncate" title={file.filename}><span className="font-weight-bold">{file.filename}</span><br />{file.hash}</Col>
                   <Col className="col-2 text-right">{humanFileSize(file.contentSize, true)}</Col>
                   <Col className="col-2 text-right">
@@ -447,7 +447,7 @@ class App extends Component {
                   </Col>
                 </Row>
                 {Object.keys(file.acl).map(key => {
-                  return <Row className="border-top pt-2 mt-2 mb-0">
+                  return <Row className="mt-2 pb-0 mb-0">
                     <Col sm={1}><strong>{this.formatRole(file.acl[key])}</strong></Col>
                     <Col sm={11}>{key}</Col>
                   </Row>
