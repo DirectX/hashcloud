@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 	"strings"
+	"time"
 )
 
 var storagePath string
@@ -46,7 +46,8 @@ func main() {
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileGetHandler).Queries("signature", "{signature}").Methods("GET")
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileUpdateHandler).Queries("signature", "{signature}").Methods("UPDATE")
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileDeleteHandler).Queries("signature", "{signature}").Methods("DELETE")
-	
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./frontend/build/")))
+
 	log.Println("Listening at port 3010...")
 	log.Fatal(http.ListenAndServe(":3010", router))
 }
@@ -55,7 +56,7 @@ func UserFilesOptionsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Options")
 
 	response := Response{
-		OK: true,
+		OK:           true,
 		ErrorMessage: "",
 	}
 
@@ -63,7 +64,7 @@ func UserFilesOptionsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET,POST")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		panic(err)
 	}
@@ -123,7 +124,7 @@ func UserFilesPostHandler(w http.ResponseWriter, r *http.Request) {
 				if _, err := os.Stat(storageUserPath); os.IsNotExist(err) {
 					os.Mkdir(storageUserPath, 0755)
 				}
-				
+
 				// Creating empty file hash placeholder in user's directory
 				userFileName := filepath.Join(storageUserPath, hash)
 				_ = ioutil.WriteFile(userFileName, []byte{}, 0644)
@@ -135,7 +136,7 @@ func UserFilesPostHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if CheckSignature("upload+" + strings.Join(hashes, "+"), signature, address) {
+	if CheckSignature("upload+"+strings.Join(hashes, "+"), signature, address) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
@@ -175,7 +176,7 @@ func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if CheckSignature("list+" + address, signature, address) {
+	if CheckSignature("list+"+address, signature, address) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
@@ -191,7 +192,7 @@ func UserFilesGetHandler(w http.ResponseWriter, r *http.Request) {
 
 func UserFileOptionsHandler(w http.ResponseWriter, r *http.Request) {
 	response := Response{
-		OK: true,
+		OK:           true,
 		ErrorMessage: "",
 	}
 
@@ -199,7 +200,7 @@ func UserFileOptionsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "GET,UPDATE,DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		panic(err)
 	}
@@ -232,7 +233,7 @@ func UserFileGetHandler(w http.ResponseWriter, r *http.Request) {
 				if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
 					http.NotFound(w, r)
 				} else {
-					if CheckSignature("download+" + hash, signature, address) {
+					if CheckSignature("download+"+hash, signature, address) {
 						w.Header().Set("Access-Control-Allow-Origin", "*")
 						w.Header().Set("Access-Control-Allow-Methods", "GET")
 						w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
@@ -274,7 +275,7 @@ func UserFileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				if !CheckSignature("share+" + hash, signature, address) {
+				if !CheckSignature("share+"+hash, signature, address) {
 					http.Error(w, "Forbidden", 403)
 					return
 				}
@@ -322,7 +323,7 @@ func UserFileUpdateHandler(w http.ResponseWriter, r *http.Request) {
 				_ = ioutil.WriteFile(metaFileName, meta, 0644)
 
 				response := Response{
-					OK: true,
+					OK:           true,
 					ErrorMessage: "",
 				}
 
@@ -366,7 +367,7 @@ func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				if !CheckSignature("delete+" + hash, signature, address) {
+				if !CheckSignature("delete+"+hash, signature, address) {
 					http.Error(w, "Forbidden", 403)
 					return
 				}
@@ -388,7 +389,7 @@ func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 				os.Remove(dataFileName)
 
 				response := Response{
-					OK: true,
+					OK:           true,
 					ErrorMessage: "",
 				}
 

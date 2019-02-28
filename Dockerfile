@@ -1,9 +1,12 @@
 FROM golang:alpine
 
-WORKDIR /go/src/github.com/DirectX/hashcloud
+WORKDIR /app
 COPY . .
 
-RUN apk add --update --no-cache git
-RUN go get github.com/pilu/fresh
+RUN apk add --update --no-cache git gcc libc-dev
 RUN go get
-CMD ["fresh"]
+RUN go build
+
+EXPOSE 3010
+
+CMD ["./hashcloud"]
