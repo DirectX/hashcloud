@@ -18,24 +18,23 @@ var storagePath string
 
 func main() {
 	storagePath = filepath.Join(".", "storage")
-
 	if _, err := os.Stat(storagePath); os.IsNotExist(err) {
 		os.Mkdir(storagePath, 0755)
+	}
 
-		storageDataPath := filepath.Join(storagePath, "data")
-		if _, err := os.Stat(storageDataPath); os.IsNotExist(err) {
-			os.Mkdir(storageDataPath, 0755)
-		}
+	storageDataPath := filepath.Join(storagePath, "data")
+	if _, err := os.Stat(storageDataPath); os.IsNotExist(err) {
+		os.Mkdir(storageDataPath, 0755)
+	}
 
-		storageMetaPath := filepath.Join(storagePath, "meta")
-		if _, err := os.Stat(storageMetaPath); os.IsNotExist(err) {
-			os.Mkdir(storageMetaPath, 0755)
-		}
+	storageMetaPath := filepath.Join(storagePath, "meta")
+	if _, err := os.Stat(storageMetaPath); os.IsNotExist(err) {
+		os.Mkdir(storageMetaPath, 0755)
+	}
 
-		storageUsersPath := filepath.Join(storagePath, "users")
-		if _, err := os.Stat(storageUsersPath); os.IsNotExist(err) {
-			os.Mkdir(storageUsersPath, 0755)
-		}
+	storageUsersPath := filepath.Join(storagePath, "users")
+	if _, err := os.Stat(storageUsersPath); os.IsNotExist(err) {
+		os.Mkdir(storageUsersPath, 0755)
 	}
 
 	router := mux.NewRouter().StrictSlash(true)
