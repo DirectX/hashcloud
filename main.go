@@ -45,6 +45,7 @@ func main() {
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileGetHandler).Queries("signature", "{signature}").Methods("GET")
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileUpdateHandler).Queries("signature", "{signature}").Methods("UPDATE")
 	router.HandleFunc("/api/v1/users/{address}/files/{hash}", UserFileDeleteHandler).Queries("signature", "{signature}").Methods("DELETE")
+	router.HandleFunc("/api/v1/files/{hash}", FileGetHandler).Methods("GET")
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./frontend/build/")))
 
 	log.Println("Listening at port 3010...")
@@ -399,6 +400,43 @@ func UserFileDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 				if err := json.NewEncoder(w).Encode(response); err != nil {
 					panic(err)
+				}
+			}
+		}
+	}
+}
+
+func FileGetHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	address := "0x0000000000000000000000000000000000000000"
+	hash := vars["hash"]
+
+	metaFileName := filepath.Join(storagePath, "meta", hash)
+	if _, err := os.Stat(metaFileName); os.IsNotExist(err) {
+		http.NotFound(w, r)
+	} else {
+		meta, err := ioutil.ReadFile(metaFileName)
+
+		if err != nil {
+			http.Error(w, "Error reading file", 500)
+		} else {
+			var fileMeta FileMeta
+			json.Unmarshal(meta, &fileMeta)
+
+			currentUserRole, ok := fileMeta.ACL[address]
+			if !ok || currentUserRole != RoleViewer {
+				http.Error(w, "Forbidden", 403)
+			} else {
+				dataFileName := filepath.Join(storagePath, "data", hash)
+
+				if _, err := os.Stat(dataFileName); os.IsNotExist(err) {
+					http.NotFound(w, r)
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+					w.Header().Set("Access-Control-Allow-Methods", "GET")
+					w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding")
+					w.Header().Set("Content-Type", fileMeta.ContentType)
+					http.ServeFile(w, r, dataFileName)
 				}
 			}
 		}

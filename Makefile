@@ -1,7 +1,7 @@
 IMAGE=directx/hashcloud
 VERSION=$(shell date '+%Y%m%d-%H%M%S')
 
-.DEFAULT: build-ui build
+.DEFAULT: build-ui build push
 
 build-ui:
 	@cd frontend && npm install && npm run build && cd ..
